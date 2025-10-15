@@ -1,0 +1,202 @@
+------------------Add to db.ts---------------------
+
+/**
+ * Update Item
+ * 
+ * Modifies an existing item in the database.
+ * 
+ * Important: Uses parameterized queries (? placeholders) for security.
+ * This ensures that user input (name, quantity, id) is treated as data, not code,
+ * preventing SQL injection vulnerabilities.
+ * 
+ * Example: If id=3, name="Oranges", and quantity=10, the query becomes:
+ * UPDATE items SET name='Oranges', quantity=10 WHERE id=3;
+ * 
+ * @param db - The SQLite database instance
+ * @param id - The unique identifier of the item to update
+ * @param name - The updated name for the item
+ * @param quantity - The updated quantity for the item
+ * @returns Promise that resolves when the update operation completes
+ */
+export const updateItem = async (
+  db: SQLiteDatabase,
+  id: number,
+  name: string,
+  quantity: number
+): Promise<void> => {
+  await db.runAsync("UPDATE items SET name = ?, quantity = ? WHERE id = ?;", [name, quantity, id]);
+};
+
+/**
+ * Delete Item
+ * 
+ * Removes an item from the database based on its unique identifier.
+ * 
+ * Important: Uses a parameterized query to securely identify which row to delete.
+ * Only the item with the matching `id` will be removed from the table.
+ * 
+ * Example: If id=5, the query becomes:
+ * DELETE FROM items WHERE id=5;
+ * 
+ * @param db - The SQLite database instance
+ * @param id - The unique identifier of the item to delete
+ * @returns Promise that resolves when the delete operation completes
+ */
+export const deleteItem = async (db: SQLiteDatabase, id: number): Promise<void> => {
+  await db.runAsync("DELETE FROM items WHERE id = ?;", [id]);
+};
+
+
+
+-----------------------Add to index.tsx ----------------------------------
+
+Create editingId state variable
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+Can remove the saveItem function - no longer needed
+
+Add functions for saveOrUpdate, startEdit, confirmDelete
+/**
+   * Save or Update Item Function
+   *
+   * Validates user input, then either inserts a new record or updates
+   * an existing record depending on whether `editingId` is null.
+   *
+   * Validation Steps:
+   * 1. Ensure the name is not empty (after trimming whitespace)
+   * 2. Parse quantity as an integer
+   * 3. Ensure quantity is a valid number (not NaN)
+   *
+   * Workflow:
+   * - If no item is being edited (editingId is null), insert a new item.
+   * - If an item is being edited, update that record in the database.
+   *
+   * After successful operation:
+   * - The list of items is refreshed from the database
+   * - Form fields and editing state are cleared
+   *
+   * @returns Promise that resolves when the save or update completes
+   */
+  const saveOrUpdate = async () => {
+    if (!name.trim()) return;
+    const parsedQuantity = parseInt(quantity, 10);
+    if (Number.isNaN(parsedQuantity)) return;
+
+    try {
+      if (editingId === null) {
+        await insertItem(db, name.trim(), parsedQuantity);
+      } else {
+        await updateItem(db, editingId, name.trim(), parsedQuantity);
+      }
+      await loadItems();
+      setName("");
+      setQuantity("");
+      setEditingId(null);
+    } catch (err) {
+      console.log("Failed to save/update item", err);
+    }
+  };
+
+  /**
+   * Start Edit Function
+   *
+   * Prepares the form for editing an existing item.
+   *
+   * When a user taps the "Edit" button, this function:
+   * - Saves the selected item's `id` in state (editingId)
+   * - Populates the input fields (`name` and `quantity`)
+   *   so the user can modify existing values
+   *
+   * Once editing is complete and the user taps "Update Item",
+   * the `saveOrUpdate` function will handle saving the changes.
+   *
+   * @param item - The item object that the user selected to edit
+   * @returns void
+   */
+  const startEdit = (item: Item) => {
+    setEditingId(item.id);
+    setName(item.name);
+    setQuantity(String(item.quantity));
+  };
+
+  /**
+   * Confirm Delete Function
+   *
+   * Displays a confirmation dialog before deleting an item from the database.
+   *
+   * Workflow:
+   * 1. Shows an alert asking the user to confirm deletion.
+   * 2. If the user confirms, deletes the item using its `id`.
+   * 3. Reloads the item list to reflect the change.
+   * 4. If the deleted item was currently being edited, clears the form.
+   *
+   * This confirmation step helps prevent accidental deletions.
+   *
+   * @param id - The unique identifier of the item to delete
+   * @returns void
+   */
+  const confirmDelete = (id: number) => {
+    Alert.alert("Delete item?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteItem(db, id);
+            await loadItems();
+            if (editingId === id) {
+              setEditingId(null);
+              setName("");
+              setQuantity("");
+            }
+          } catch (err) {
+            console.log("Failed to delete item", err);
+          }
+        },
+      },
+    ]);
+  };
+
+
+
+  Inside the FlatList, update it so it properly calls the ItemRow component for renderItem
+
+       <ItemRow
+            name={item.name}
+            quantity={item.quantity}
+            onEdit={() => startEdit(item)}
+            onDelete={() => confirmDelete(item.id)}
+          />
+
+
+---------------------- Inside ItemRow.tsx  --------------------------
+
+Add two more props for the delete and 
+    
+  onEdit: () => void;
+  onDelete: () => void;
+
+  Add them to the function header and then add this below the View
+
+    {/* Right side: Action icons */}
+      <View style={styles.actions}>
+        <TouchableOpacity
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${name}`}
+          style={styles.iconButton}
+        >
+          <MaterialIcons name="edit" size={24} color="#007BFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${name}`}
+          style={styles.iconButton}
+        >
+          <MaterialIcons name="delete" size={24} color="#D32F2F" />
+        </TouchableOpacity>
+      </View>
+
