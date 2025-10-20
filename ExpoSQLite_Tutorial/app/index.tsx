@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { fetchItems, insertItem,deleteItem,updateItem, type Item } from "../data/db";
 import ItemRow from "./components/ItemRow";
 
@@ -31,7 +32,6 @@ export default function App() {
   const [name, setName] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [editingId, setEditingId] = useState<number | null>(null);
-
   /**
    * Database State
    *
@@ -39,6 +39,14 @@ export default function App() {
    * When this updates, React re-renders the FlatList to show the new data.
    */
   const [items, setItems] = useState<Item[]>([]);
+
+  /**
+   * Sort Option State
+   *
+   * Controls which sorting option is currently selected in the dropdown.
+   * Options: name-asc, name-desc, quantity-asc, quantity-desc
+   */
+  const [sortOption, setSortOption] = useState<string>("name-asc");
 
   /**
    * Load Items on Mount
@@ -53,7 +61,6 @@ export default function App() {
   useEffect(() => {
     loadItems();
   }, []);
-
   /**
    * Load Items Function
    *
@@ -70,10 +77,48 @@ export default function App() {
   const loadItems = async () => {
     try {
       const value = await fetchItems(db);
-      setItems(value);
+      setItems(sortItems(value, sortOption));
     } catch (err) {
       console.log("Failed to fetch items", err);
     }
+  };
+
+  /**
+   * Sort Items Function
+   *
+   * Sorts an array of items based on the selected sort option.
+   *
+   * @param itemsToSort - Array of items to sort
+   * @param option - Sort option (name-asc, name-desc, quantity-asc, quantity-desc)
+   * @returns Sorted array of items
+   */
+  const sortItems = (itemsToSort: Item[], option: string): Item[] => {
+    const sorted = [...itemsToSort];
+    
+    switch (option) {
+      case "name-asc":
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case "name-desc":
+        return sorted.sort((a, b) => b.name.localeCompare(a.name));
+      case "quantity-asc":
+        return sorted.sort((a, b) => a.quantity - b.quantity);
+      case "quantity-desc":
+        return sorted.sort((a, b) => b.quantity - a.quantity);
+      default:
+        return sorted;
+    }
+  };
+
+  /**
+   * Handle Sort Change
+   *
+   * Updates the sort option and re-sorts the current items.
+   *
+   * @param option - The new sort option selected from the dropdown
+   */
+  const handleSortChange = (option: string) => {
+    setSortOption(option);
+    setItems(sortItems(items, option));
   };
 
   /**
@@ -235,9 +280,7 @@ export default function App() {
         value={quantity}
         onChangeText={setQuantity}
         keyboardType="numeric"
-      />
-
-      {/* 
+      />      {/* 
         Save Button
         Triggers the saveOrUpdate function which validates and saves to database.
       */}
@@ -245,6 +288,26 @@ export default function App() {
         title={editingId === null ? "Save Item" : "Update Item"}
         onPress={saveOrUpdate}
       />
+
+      {/* 
+        Sort Dropdown
+        Allows users to sort items by name (A-Z, Z-A) or quantity (low-high, high-low)
+      */}
+      <View style={styles.sortContainer}>
+        <Text style={styles.sortLabel}>Sort by:</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={sortOption}
+            onValueChange={handleSortChange}
+            style={styles.picker}
+          >
+            <Picker.Item label="Name A-Z" value="name-asc" />
+            <Picker.Item label="Name Z-A" value="name-desc" />
+            <Picker.Item label="Qty Low-High" value="quantity-asc" />
+            <Picker.Item label="Qty High-Low" value="quantity-desc" />
+          </Picker>
+        </View>
+      </View>
       <FlatList
         style={styles.list}
         data={items}
@@ -301,6 +364,27 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     padding: 10,
     marginBottom: 10,
+  },
+  sortContainer: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sortLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginRight: 10,
+  },
+  pickerContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+  },
+  picker: {
+    height: 50,
   },
   list: {
     marginTop: 20,
